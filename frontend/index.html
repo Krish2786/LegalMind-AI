@@ -20,36 +20,14 @@
             --sidebar-width: 280px;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: #f5f7fa; color: var(--text); line-height: 1.6; display: flex; }
-        
-        /* --- FIXED SIDEBAR STYLES --- */
-        .sidebar {
-            width: var(--sidebar-width);
-            background: white;
-            box-shadow: var(--shadow);
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            z-index: 20;
-        }
+        body { background-color: #f5f7fa; color: var(--text); line-height: 1.6; display: flex; min-height: 100vh; }
+        .sidebar { width: var(--sidebar-width); background: white; box-shadow: var(--shadow); padding: 20px; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 20; }
         .logo { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 600; color: var(--primary); margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
         .logo i { font-size: 28px; }
         .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 15px; border-radius: var(--radius); color: var(--text); text-decoration: none; margin-bottom: 5px; transition: all 0.3s; }
         .nav-item:hover, .nav-item.active { background: var(--primary); color: white; }
-        
-        /* --- MAIN CONTENT ADJUSTMENTS --- */
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            margin-left: var(--sidebar-width);
-            min-height: 100vh;
-        }
-        .top-bar { background: white; padding: 15px 30px; box-shadow: var(--shadow); z-index: 10; }
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow-y: auto; margin-left: var(--sidebar-width); min-height: 100vh; }
+        .top-bar { background: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow); z-index: 10; }
         .content { padding: 30px; flex: 1; }
         .section-title { font-size: 1.8rem; color: var(--primary); margin-bottom: 20px; }
         .upload-card { background: white; border-radius: var(--radius); padding: 25px; box-shadow: var(--shadow); margin-bottom: 30px; }
@@ -73,7 +51,17 @@
         #results-content table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
         #results-content th, #results-content td { border: 1px solid var(--border); padding: 8px; text-align: left; }
         #results-content th { background-color: var(--secondary); }
-        .loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.9); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; }
+        .loading-overlay { 
+            display: none; /* Hidden by default */
+            position: fixed; 
+            top: 0; left: 0; 
+            width: 100%; height: 100%; 
+            background: rgba(255, 255, 255, 0.9); 
+            z-index: 1000; 
+            justify-content: center; 
+            align-items: center; 
+            flex-direction: column; 
+        }
         .spinner { width: 60px; height: 60px; border: 5px solid rgba(26, 61, 124, 0.2); border-radius: 50%; border-top-color: var(--primary); animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .highlight-critical { color: #c0392b; border-bottom: 3px solid rgba(192, 57, 43, 0.3); font-weight: 600; padding-bottom: 1px; }
@@ -167,12 +155,13 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // --- ELEMENT REFERENCES ---
             const analysisForm = document.getElementById('analysis-form');
             const fileInput = document.getElementById('fileInput');
             const promptInput = document.getElementById('promptInput');
             const modelSelect = document.getElementById('modelSelect');
             const submitBtn = document.getElementById('submitBtn');
-            const loadingOverlay = document.getElementById('loadingOverlay');
+            const loadingOverlay = document.getElementById('loadingOverlay'); // This is the full-screen overlay
             const uploadArea = document.getElementById('uploadArea');
             const fileNameDisplay = document.getElementById('fileName');
             const resultsContent = document.getElementById('results-content');
@@ -182,6 +171,7 @@
             
             let documentContext = "";
             let currentModel = modelSelect.value;
+            const BACKEND_URL = "https://legalmind-ai.onrender.com/"; // Define your backend URL
 
             modelSelect.addEventListener('change', () => {
                 currentModel = modelSelect.value;
@@ -228,6 +218,8 @@
             fileInput.addEventListener('change', () => {
                 if (fileInput.files.length > 0) {
                     fileNameDisplay.textContent = `Selected file: ${fileInput.files[0].name}`;
+                } else {
+                    fileNameDisplay.textContent = ''; // Clear if no file selected
                 }
             });
             
@@ -242,10 +234,11 @@
                     return;
                 }
 
-                loadingOverlay.style.display = 'flex';
+                // Show the full-screen loading overlay
+                loadingOverlay.style.display = 'flex'; // Use 'flex' to center content
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<i class="fas fa-cogs fa-spin"></i> Analyzing...';
-                resultsContent.innerHTML = ''; 
+                resultsContent.innerHTML = '<p style="color: var(--text-light);">Analysis in progress...</p>'; // Indicate loading in results area too
 
                 const formData = new FormData();
                 formData.append('pdfFile', file);
@@ -253,7 +246,7 @@
                 formData.append('model', selectedModel);
 
                 try {
-                    const response = await fetch('https://legalmind-ai.onrender.com/simplify', {
+                    const response = await fetch(`${BACKEND_URL}/simplify`, { // Use BACKEND_URL
                         method: 'POST',
                         body: formData,
                     });
@@ -271,7 +264,8 @@
                     console.error('Error:', error);
                     resultsContent.innerHTML = `<p style="color: var(--accent);"><b>Error:</b> ${error.message}</p>`;
                 } finally {
-                    loadingOverlay.style.display = 'none';
+                    // Hide the full-screen loading overlay
+                    loadingOverlay.style.display = 'none'; 
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = '<i class="fas fa-cogs"></i> Analyze Document';
                 }
@@ -280,7 +274,7 @@
             function enableChat() {
                 chatInput.disabled = false;
                 chatSendBtn.disabled = false;
-                chatMessages.innerHTML = '';
+                chatMessages.innerHTML = ''; // Clear previous chat history
                 addMessage("I've loaded the document. Ask me anything about it.", 'ai');
             }
 
@@ -303,10 +297,10 @@
 
                 addMessage(question, 'user');
                 chatInput.value = '';
-                const thinkingMessage = addMessage('', 'ai', true);
+                const thinkingMessage = addMessage('', 'ai', true); // Pass true to show spinner
 
                 try {
-                    const response = await fetch('https://legalmind-ai.onrender.com/ask', {
+                    const response = await fetch(`${BACKEND_URL}/ask`, { // Use BACKEND_URL
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -316,14 +310,15 @@
                         })
                     });
                     const data = await response.json();
-                    if (!response.ok) throw new Error(data.error);
+                    if (!response.ok) throw new Error(data.error || 'An unknown error occurred.');
                     
-                    thinkingMessage.classList.remove('loading');
-                    thinkingMessage.innerHTML = marked.parse(data.answer);
+                    // Remove the loading spinner from the thinking message and add the actual answer
+                    thinkingMessage.innerHTML = marked.parse(data.answer); 
 
                 } catch (error) {
-                    thinkingMessage.textContent = `Error: ${error.message}`;
                     console.error("Chat error:", error);
+                    // Update the thinking message to show the error
+                    thinkingMessage.innerHTML = `<p style="color: var(--accent);">Error: ${error.message}</p>`;
                 }
             }
 
