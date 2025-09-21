@@ -119,10 +119,11 @@ def _build_analysis_prompt(document_text: str, user_prompt: str):
 **Document Text:**
 {document_text}
 ---
-**Your Structured Analysis (Indian Legal Context):**
 ### **1.Summary**
-* **Potential Risks:** *(Identify clauses on payment, penalties, indemnification)*
+*(1.Provide a 1-4 sentence overview of the document's core purpose with key details and risks,
+* **Potential Risks: In1-3 sentence** *(Identify clauses on payment, penalties, Identify clauses on indemnification)*
 * **General Advice:** *(e.g., "Consult a lawyer practicing in India.")*
+
 ### **2. Key Details at a Glance**
 | Detail | Information Found (with Clause Reference) |
 | :--- | :--- |
@@ -130,20 +131,27 @@ def _build_analysis_prompt(document_text: str, user_prompt: str):
 | **Contract Term** | *(e.g., 24 months from effective date (Section 3))* |
 | **Payment Amount**| *(e.g., ₹50,000 INR per month (Annexure A))* |
 | **Notice Period** | *(e.g., 60 days for termination (Clause 12.2))* |
+
 ### **3. Key Parties & Their Roles**
-* **Party A:** *(Identify party and role.)*
-* **Party B:** *(Identify party and role.)*
+* **Party A:** *(Identify the party and their role.)*
+* **Party B:** *(Identify the other party and their role.)*
+
 ### **4. Key Clauses & Their Implications (under Indian Law)**
-* **[Clause Name]:** *(Explain the meaning and impact. Cite the source.)*
+* **[Clause Name]:** *(Explain the meaning and impact of a major clause. Cite the source.)*
+
 ### **5. Potential Risks & Red Flags 🚩 (Indian Context)**
 * **Financial Risk:** *(Identify clauses on payment, penalties. Cite the source.)*
 * **Legal/Liability Risk:** *(Identify clauses on indemnification, liability. Cite the source.)*
+
 ### **6. Dispute Resolution (Arbitration / Court Jurisdiction)**
-* *(Explain how disputes are resolved. Cite Indian law.)*
+* *(Explain how disputes are resolved. Cite Indian law, e.g., Arbitration & Conciliation Act, 1996.)*
+
 ### **7. Confidentiality & Intellectual Property**
-* *(Highlight clauses on confidentiality and IP ownership.)*
+* *(Highlight clauses on confidentiality and IP ownership. Note who owns the IP.)*
+
 ### **8. Compliance & Regulatory Requirements (Indian Laws)**
-* *(Note compliance obligations with Indian laws.)*
+* *(Note compliance obligations with Indian laws like the Companies Act, 2013; Labour Laws; or the DPDP Act, 2023, if applicable.)*
+
 ### **9. Actionable Next Steps (Prioritized)**
 1.  **Immediate Action:** *(Suggest the most critical next step.)*
 2.  **Recommendation:** *(Suggest an important action.)*
