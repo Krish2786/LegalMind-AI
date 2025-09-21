@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LegalMind AI | Document Analysis</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --primary: #1a3d7c;
+            --primary-light: #2c5ba3;
+            --secondary: #f8f9fa;
+            --accent: #ff6b6b;
+            --text: #333;
+            --text-light: #6c757d;
+            --border: #dee2e6;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --radius: 8px;
+            --sidebar-width: 280px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f5f7fa; color: var(--text); line-height: 1.6; display: flex; min-height: 100vh; }
+        /* Fixed Sidebar Styles */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: white;
+            box-shadow: var(--shadow);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            position: fixed; /* Make the sidebar fixed */
+            top: 0;
+            left: 0;
+            height: 100vh; /* Make it take full viewport height */
+            z-index: 20; /* Ensure it stays on top */
+        }
+        .logo { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 600; color: var(--primary); margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+        .logo i { font-size: 28px; }
+        .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 15px; border-radius: var(--radius); color: var(--text); text-decoration: none; margin-bottom: 5px; transition: all 0.3s; }
+        .nav-item:hover, .nav-item.active { background: var(--primary); color: white; }
+
+        /* Main Content Adjustments for Fixed Sidebar */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto; /* Allow scrolling only for main content */
+            margin-left: var(--sidebar-width); /* Push content over by sidebar width */
+            min-height: 100vh; /* Ensure it takes full height */
+        }
+        .top-bar { background: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow); z-index: 10; }
+        .content { padding: 30px; flex: 1; /* overflow: auto; REMOVED, controlled by main-content */ }
+        .section-title { font-size: 1.8rem; color: var(--primary); margin-bottom: 20px; }
+        .upload-card { background: white; border-radius: var(--radius); padding: 25px; box-shadow: var(--shadow); margin-bottom: 30px; }
+        .form-group { margin-bottom: 20px; text-align: left; }
+        .form-group label { display: block; font-weight: 600; margin-bottom: 8px; color: var(--primary); }
+        .form-group input[type="text"], .form-group select { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 1em; }
+        .upload-area { border: 2px dashed var(--border); padding: 30px; border-radius: var(--radius); text-align: center; cursor: pointer; transition: background-color 0.3s; }
+        .upload-area:hover { background-color: var(--secondary); }
+        .upload-icon { font-size: 48px; color: var(--primary-light); margin-bottom: 16px; }
+        .btn { background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: var(--radius); font-size: 16px; font-weight: 500; cursor: pointer; transition: background 0.3s; display: inline-block; }
+        .btn:hover { background: var(--primary-light); }
+        .btn:disabled { background: var(--text-light); cursor: not-allowed; }
+        .file-input { display: none; }
+        .analysis-container { margin-bottom: 30px;}
+        .analysis-results { background: white; border-radius: var(--radius); padding: 25px; box-shadow: var(--shadow); min-height: 300px; overflow: auto; }
+        .analysis-results h3 { color: var(--primary); margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
+        #results-content h3 { font-size: 1.2rem; color: var(--primary); margin-top: 20px; margin-bottom: 10px; }
+        #results-content ul { padding-left: 20px; margin-bottom: 15px; }
+        #results-content li { margin-bottom: 8px; }
+        #results-content p { margin-bottom: 10px; }
+        #results-content table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+        #results-content th, #results-content td { border: 1px solid var(--border); padding: 8px; text-align: left; }
+        #results-content th { background-color: var(--secondary); }
+        .loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.9); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; }
+        .spinner { width: 60px; height: 60px; border: 5px solid rgba(26, 61, 124, 0.2); border-radius: 50%; border-top-color: var(--primary); animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .highlight-critical { color: #c0392b; border-bottom: 3px solid rgba(192, 57, 43, 0.3); font-weight: 600; padding-bottom: 1px; }
+        .highlight-moderate { color: #d35400; border-bottom: 3px solid rgba(211, 84, 0, 0.3); font-weight: 600; padding-bottom: 1px; }
+        .chat-box { background: white; border-radius: var(--radius); padding: 25px; box-shadow: var(--shadow); }
+        .chat-box h3 { color: var(--primary); margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
+        .chat-messages { min-height: 100px; max-height: 300px; overflow-y: auto; margin-bottom: 20px; padding: 15px; background: var(--secondary); border-radius: var(--radius); }
+        .message { margin-bottom: 15px; padding: 12px; border-radius: var(--radius); max-width: 80%; line-height: 1.4; word-wrap: break-word; }
+        .message.user { background: var(--primary); color: white; margin-left: auto; }
+        .message.ai { background: #e9ecef; color: var(--text); }
+        .chat-input { display: flex; gap: 10px; }
+        .chat-input input { flex: 1; padding: 12px 15px; border: 1px solid var(--border); border-radius: var(--radius); outline: none; }
+        .chat-input input:disabled { background: #f1f1f1; cursor: not-allowed; }
+        .chat-input button { background: var(--primary); color: white; border: none; border-radius: var(--radius); width: 50px; cursor: pointer; }
+        .chat-input button:disabled { background: var(--text-light); cursor: not-allowed; }
+        .spinner-dots { display: flex; align-items: center; gap: 5px; }
+        .spinner-dots .dot { width: 8px; height: 8px; background-color: #888; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out both; }
+        .spinner-dots .dot:nth-child(1) { animation-delay: -0.32s; }
+        .spinner-dots .dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo"><i class="fas fa-scale-balanced"></i><span>LegalMind AI</span></div>
+        <a href="#" class="nav-item active"><i class="fas fa-home"></i><span>Dashboard</span></a>
+        <a href="documents.html" class="nav-item"><i class="fas fa-file-contract"></i><span>Documents</span></a>
+        <a href="history.html" class="nav-item"><i class="fas fa-history"></i><span>History</span></a>
+    </aside>
+
+    <main class="main-content">
+        <div class="top-bar"></div>
+        <div class="content">
+            <h1 class="section-title">Document Analysis</h1>
+            
+            <form id="analysis-form">
+                <div class="upload-card">
+                    <div class="form-group">
+                        <label for="fileInput">1. Upload Legal Document (.pdf)</label>
+                        <div class="upload-area" id="uploadArea">
+                            <div class="upload-icon"><i class="fas fa-file-upload"></i></div>
+                            <p><b>Drag & drop your file here</b> or click to browse</p>
+                            <p id="fileName" style="color: var(--primary); font-weight: 500;"></p>
+                        </div>
+                        <input type="file" id="fileInput" class="file-input" accept=".pdf" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="modelSelect">2. Choose Gemini Model</label>
+                        <select id="modelSelect">
+                            <option value="gemini-1.5-pro">Gemini 1.5 Pro (Complex Reasoning & Analysis)</option>
+                            <option value="gemini-1.5-flash" selected>Gemini 1.5 Flash (Fast All-around Help)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="promptInput">3. Enter Your Request (Optional)</label>
+                        <input type="text" id="promptInput" placeholder="e.g., Explain the termination clause to me.">
+                    </div>
+                    <button type="submit" class="btn" id="submitBtn">
+                        <i class="fas fa-cogs"></i> Analyze Document
+                    </button>
+                </div>
+            </form>
+            
+            <div class="analysis-container">
+                <div class="analysis-results">
+                    <h3>Analysis Results</h3>
+                    <div id="results-content">
+                         <p style="color: var(--text-light);">Your analysis will appear here.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-box">
+                <h3>Ask a Follow-up Question</h3>
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message ai">Please analyze a document or load one from your history to begin the chat.</div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="chatInput" placeholder="Ask anything about this document..." disabled>
+                    <button id="chatSendBtn" disabled><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <h3>Analyzing your document...</h3>
+        <p>This may take a few moments.</p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // --- ELEMENT REFERENCES ---
+            const analysisForm = document.getElementById('analysis-form');
+            const fileInput = document.getElementById('fileInput');
+            const promptInput = document.getElementById('promptInput');
+            const modelSelect = document.getElementById('modelSelect'); // New: Model selection
+            const submitBtn = document.getElementById('submitBtn');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const uploadArea = document.getElementById('uploadArea');
+            const fileNameDisplay = document.getElementById('fileName');
+            const resultsContent = document.getElementById('results-content');
+            const chatMessages = document.getElementById('chatMessages');
+            const chatInput = document.getElementById('chatInput');
+            const chatSendBtn = document.getElementById('chatSendBtn');
+            
+            let documentContext = "";
+            let currentModel = modelSelect.value; // Initialize with default selected model
+
+            // Listen for changes in the model selection
+            modelSelect.addEventListener('change', () => {
+                currentModel = modelSelect.value;
+            });
+            
+            // --- KEYWORD LISTS & HIGHLIGHTING FUNCTION ---
+            const criticalWords = ['terminate', 'termination', 'indemnify', 'indemnification', 'liability', 'breach', 'default', 'waive', 'arbitration', 'litigation', 'damages', 'unfavorable', 'without cause'];
+            const moderateWords = ['insurance', 'confidentiality', 'notice period', 'payment terms', 'obligations', 'jurisdiction', 'governing law', 'assignment', 'exhibits'];
+
+            function highlightKeywords(htmlContent) {
+                let highlightedContent = htmlContent;
+                criticalWords.forEach(word => {
+                    const regex = new RegExp(`\\b(${word})\\b`, 'gi');
+                    highlightedContent = highlightedContent.replace(regex, `<span class="highlight-critical">$1</span>`);
+                });
+                moderateWords.forEach(word => {
+                    const regex = new RegExp(`\\b(${word})\\b`, 'gi');
+                    highlightedContent = highlightedContent.replace(regex, `<span class="highlight-moderate">$1</span>`);
+                });
+                return highlightedContent;
+            }
+            
+            // --- FUNCTION TO LOAD ANALYSIS FROM "VIEW" CLICK ---
+            function loadAnalysisFromStorage() {
+                const storedDoc = localStorage.getItem('viewAnalysis');
+                if (storedDoc) {
+                    const doc = JSON.parse(storedDoc);
+                    
+                    fileNameDisplay.textContent = `Viewing analysis for: ${doc.filename}`;
+                    
+                    const rawHtml = marked.parse(doc.summary);
+                    const highlightedHtml = highlightKeywords(rawHtml);
+                    resultsContent.innerHTML = highlightedHtml;
+
+                    if (doc.full_text) {
+                        documentContext = doc.full_text;
+                        enableChat();
+                    } else {
+                        addMessage("Summary loaded, but Q&A is unavailable as its full text was not saved.", 'ai');
+                    }
+                    
+                    localStorage.removeItem('viewAnalysis');
+                }
+            }
+            
+            // --- FILE UPLOAD UI HANDLING ---
+            uploadArea.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files.length > 0) {
+                    fileNameDisplay.textContent = `Selected file: ${fileInput.files[0].name}`;
+                }
+            });
+            
+            // --- MAIN FORM SUBMISSION HANDLING ---
+            analysisForm.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const file = fileInput.files[0];
+                const prompt = promptInput.value;
+                const selectedModel = modelSelect.value; // Get selected model here
+                
+                if (!file) {
+                    alert('Please select a PDF file to analyze.');
+                    return;
+                }
+
+                loadingOverlay.style.display = 'flex';
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-cogs fa-spin"></i> Analyzing...';
+                resultsContent.innerHTML = ''; 
+
+                const formData = new FormData();
+                formData.append('pdfFile', file);
+                formData.append('prompt', prompt);
+                formData.append('model', selectedModel); // Add selected model to formData
+
+                try {
+                    const response = await fetch('http://127.0.0.1:5000/simplify', {
+                        method: 'POST',
+                        body: formData,
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error || 'An unknown error occurred.');
+                    
+                    documentContext = data.document_text;
+                    
+                    const rawHtml = marked.parse(data.summary);
+                    const highlightedHtml = highlightKeywords(rawHtml);
+                    resultsContent.innerHTML = highlightedHtml;
+
+                    enableChat();
+                } catch (error) {
+                    console.error('Error:', error);
+                    resultsContent.innerHTML = `<p style="color: var(--accent);"><b>Error:</b> ${error.message}</p>`;
+                } finally {
+                    loadingOverlay.style.display = 'none';
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-cogs"></i> Analyze Document';
+                }
+            });
+
+            // --- CHAT FUNCTIONALITY ---
+            function enableChat() {
+                chatInput.disabled = false;
+                chatSendBtn.disabled = false;
+                chatMessages.innerHTML = '';
+                addMessage("I've loaded the document. Ask me anything about it.", 'ai');
+            }
+
+            function addMessage(text, sender, isLoading = false) {
+                const messageEl = document.createElement('div');
+                messageEl.classList.add('message', sender);
+                if (isLoading) {
+                    messageEl.innerHTML = '<div class="spinner-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>';
+                } else {
+                    messageEl.textContent = text;
+                }
+                chatMessages.appendChild(messageEl);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                return messageEl;
+            }
+
+            async function handleSendMessage() {
+                const question = chatInput.value.trim();
+                if (!question || !documentContext) return;
+
+                addMessage(question, 'user');
+                chatInput.value = '';
+                const thinkingMessage = addMessage('', 'ai', true);
+
+                try {
+                    const response = await fetch('http://127.0.0.1:5000/ask', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            document_text: documentContext,
+                            question: question,
+                            model: currentModel // Pass the current model selection to the chat API
+                        })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error);
+                    
+                    thinkingMessage.classList.remove('loading');
+                    thinkingMessage.textContent = data.answer;
+
+                } catch (error) {
+                    thinkingMessage.textContent = `Error: ${error.message}`;
+                    console.error("Chat error:", error);
+                }
+            }
+
+            chatSendBtn.addEventListener('click', handleSendMessage);
+            chatInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    handleSendMessage();
+                }
+            });
+
+            // --- RUN ON PAGE LOAD ---
+            loadAnalysisFromStorage();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LegalMind AI | Activity History</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* [All previous CSS styles are unchanged] */
+        :root { --primary: #1a3d7c; --primary-light: #2c5ba3; --secondary: #f8f9fa; --accent: #ff6b6b; --text: #333; --text-light: #6c757d; --border: #dee2e6; --shadow: 0 4px 12px rgba(0, 0, 0, 0.08); --radius: 8px; --sidebar-width: 280px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f5f7fa; color: var(--text); line-height: 1.6; display: flex; min-height: 100vh; }
+        .sidebar { width: var(--sidebar-width); background: white; box-shadow: var(--shadow); padding: 20px; display: flex; flex-direction: column; }
+        .logo { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 600; color: var(--primary); margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+        .logo i { font-size: 28px; }
+        .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 15px; border-radius: var(--radius); color: var(--text); text-decoration: none; margin-bottom: 5px; transition: all 0.3s; }
+        .nav-item:hover, .nav-item.active { background: var(--primary); color: white; }
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: auto; }
+        .top-bar { background: white; padding: 15px 30px; box-shadow: var(--shadow); z-index: 10; }
+        .content { padding: 30px; flex: 1; overflow: auto; }
+        .section-title { font-size: 1.8rem; color: var(--primary); margin-bottom: 20px; }
+        .timeline { position: relative; max-width: 800px; margin: 0 auto; padding: 20px 0; }
+        .timeline::before { content: ''; position: absolute; top: 0; left: 20px; height: 100%; width: 3px; background: var(--border); }
+        .timeline-item { position: relative; margin-bottom: 30px; padding-left: 60px; }
+        .timeline-item:last-child { margin-bottom: 0; }
+        .timeline-icon { position: absolute; left: 0; top: 0; width: 40px; height: 40px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 18px; border: 3px solid #f5f7fa; z-index: 1; }
+        .timeline-icon.success { background-color: #27ae60; }
+        .timeline-icon.error { background-color: #e74c3c; }
+        .timeline-icon.info { background-color: #3498db; }
+        .timeline-content { background: white; padding: 20px; border-radius: var(--radius); box-shadow: var(--shadow); }
+        .timeline-content p { margin: 0; font-size: 16px; }
+        .timeline-content span { font-weight: 600; color: var(--primary); }
+        .timeline-time { display: block; margin-top: 8px; font-size: 13px; color: var(--text-light); }
+        .timeline-date-header { font-weight: 600; color: var(--text-light); margin-bottom: 20px; padding-left: 60px; position: relative; }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="logo"><i class="fas fa-scale-balanced"></i><span>LegalMind AI</span></div>
+        <a href="index.html" class="nav-item">
+            <i class="fas fa-home"></i>
+            <span>Dashboard</span>
+        </a>
+        <a href="documents.html" class="nav-item">
+            <i class="fas fa-file-contract"></i>
+            <span>Documents</span>
+        </a>
+        <a href="#" class="nav-item active">
+            <i class="fas fa-history"></i>
+            <span>History</span>
+        </a>
+    </aside>
+
+    <main class="main-content">
+        <div class="top-bar"></div>
+        <div class="content">
+            <h1 class="section-title">Activity History</h1>
+            <div class="timeline" id="timeline-container"></div>
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const timelineContainer = document.getElementById('timeline-container');
+
+            // Helper to map event types to icons and text
+            const eventDetails = {
+                'UPLOAD_SUCCESS': { icon: 'fa-upload', color: 'info', text: 'Uploaded new document:' },
+                'ANALYSIS_SUCCESS': { icon: 'fa-check', color: 'success', text: 'Successfully analyzed document:' },
+                'ANALYSIS_FAIL': { icon: 'fa-times', color: 'error', text: 'Analysis failed for document:' },
+                'TEXT_EXTRACT_FAIL': { icon: 'fa-exclamation-triangle', color: 'error', text: 'Could not read text from document:' }
+            };
+
+            async function fetchHistory() {
+                try {
+                    const response = await fetch('http://127.0.0.1:5000/history');
+                    if (!response.ok) throw new Error('Failed to fetch history.');
+                    const events = await response.json();
+
+                    timelineContainer.innerHTML = ''; // Clear container
+                    if (events.length === 0) {
+                        timelineContainer.innerHTML = '<p>No activity has been recorded yet.</p>';
+                        return;
+                    }
+
+                    let lastDate = null;
+                    events.forEach(event => {
+                        const eventDate = event.timestamp.split(',')[0]; // e.g., "Sep 04"
+                        const eventTime = event.timestamp.split(',')[2]; // e.g., "06:30 AM"
+
+                        // Add a date header if the day has changed
+                        if (eventDate !== lastDate) {
+                            const dateHeader = `<div class="timeline-date-header">${eventDate}, ${new Date().getFullYear()}</div>`;
+                            timelineContainer.insertAdjacentHTML('beforeend', dateHeader);
+                            lastDate = eventDate;
+                        }
+                        
+                        const details = eventDetails[event.event_type] || { icon: 'fa-question-circle', color: 'info', text: 'Unknown event:' };
+
+                        // Create the timeline item HTML
+                        const itemHtml = `
+                            <div class="timeline-item">
+                                <div class="timeline-icon ${details.color}">
+                                    <i class="fas ${details.icon}"></i>
+                                </div>
+                                <div class="timeline-content">
+                                    <p>${details.text} <span>${event.document_name}</span></p>
+                                    <small class="timeline-time">${eventTime.trim()}</small>
+                                </div>
+                            </div>
+                        `;
+                        timelineContainer.insertAdjacentHTML('beforeend', itemHtml);
+                    });
+                } catch (error) {
+                    console.error("Error fetching history:", error);
+                    timelineContainer.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                }
+            }
+
+            fetchHistory();
+        });
+    </script>
+</body>
+</html>
