@@ -14,13 +14,10 @@ load_dotenv()
 app = Flask(__name__)
 
 # --- DATABASE CONFIGURATION FOR RENDER (PostgreSQL) ---
-# This block correctly reads the DATABASE_URL environment variable from Render.
 db_url = os.getenv("DATABASE_URL")
 if not db_url:
-    # This error will show in your Render logs if the DATABASE_URL is not set.
     raise RuntimeError("FATAL: DATABASE_URL environment variable is not set.")
 
-# SQLAlchemy requires the scheme to be 'postgresql://'
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
@@ -66,7 +63,8 @@ class HistoryEvent(db.Model):
 @app.cli.command("init-db")
 def init_db_command():
     """Creates the database tables."""
-    db.create_all()
+    with app.app_context(): # Ensure app context for CLI command
+        db.create_all()
     print("Database tables initialized successfully.")
 
 # --- GEMINI API SETUP ---
@@ -99,9 +97,10 @@ def extract_text_from_pdf(file_stream: IO):
         return None
 
 def log_event(event_type: str, document_name: str):
-    event = HistoryEvent(event_type=event_type, document_name=document_name)
-    db.session.add(event)
-    db.session.commit()
+    with app.app_context(): # Ensure app context for db operations outside request context
+        event = HistoryEvent(event_type=event_type, document_name=document_name)
+        db.session.add(event)
+        db.session.commit()
 
 def _build_analysis_prompt(document_text: str, user_prompt: str):
     return f"""
@@ -158,19 +157,98 @@ def _build_qa_prompt(document_text: str, question: str):
 # --- API ROUTES ---
 @app.route('/simplify', methods=['POST'])
 def simplify_document():
-    # ... [function is unchanged]
+    if 'pdfFile' not in request.files:
+        return jsonify({"error": "No PDF file provided."}), 400
+    pdf_file = request.files['pdfFile']
+    if not pdf_file.filename:
+        return jsonify({"error": "No selected file."}), 400
+
+    selected_model_name = request.form.get('model', 'gemini-1.5-flash')
+    
+    document_text = extract_text_from_pdf(pdf_file.stream)
+    if not document_text or not document_text.strip():
+        with app.app_context(): # Log event in app context
+            log_event("TEXT_EXTRACT_FAIL", pdf_file.filename)
+            failed_doc = Document(filename=pdf_file.filename, status='Analysis Failed', summary='Could not extract text from PDF.', model_used=selected_model_name)
+            db.session.add(failed_doc)
+            db.session.commit()
+        return jsonify({"error": "Could not extract text from the PDF."}), 400
+        
+    with app.app_context(): # Log event in app context
+        log_event("UPLOAD_SUCCESS", pdf_file.filename)
+        new_doc = Document(filename=pdf_file.filename, status='In Progress', full_text=document_text, model_used=selected_model_name)
+        db.session.add(new_doc)
+        db.session.commit()
+    
+    prompt_from_user = request.form.get('prompt', "Provide a comprehensive analysis.")
+    full_prompt = _build_analysis_prompt(document_text, prompt_from_user)
+    
+    try:
+        model_instance = get_gemini_model(selected_model_name)
+        response = model_instance.generate_content(full_prompt)
+        with app.app_context(): # Update doc and log in app context
+            new_doc.summary = response.text
+            new_doc.status = 'Analyzed'
+            log_event("ANALYSIS_SUCCESS", new_doc.filename)
+            db.session.commit()
+        return jsonify({"summary": new_doc.summary, "document_text": document_text})
+    except ValueError as e:
+        print(f"Gemini API initialization error: {e}")
+        with app.app_context(): # Update doc and log in app context
+            new_doc.status = 'Analysis Failed'
+            new_doc.summary = f"API Error: {e}"
+            log_event("ANALYSIS_FAIL", new_doc.filename)
+            db.session.commit()
+        return jsonify({"error": f"AI model configuration error: {e}"}), 500
+    except Exception as e:
+        print(f"An error occurred during Gemini API call: {e}")
+        with app.app_context(): # Update doc and log in app context
+            new_doc.status = 'Analysis Failed'
+            new_doc.summary = f"Analysis failed: {e}"
+            log_event("ANALYSIS_FAIL", new_doc.filename)
+            db.session.commit()
+        return jsonify({"error": "Failed to get a response from the AI model. Check server logs for details."}), 500
+
 @app.route('/ask', methods=['POST'])
 def ask_question():
-    # ... [function is unchanged]
+    data = request.get_json()
+    if not data or 'document_text' not in data or 'question' not in data:
+        return jsonify({"error": "Missing document_text or question in request."}), 400
+
+    selected_model_name = data.get('model', 'gemini-1.5-flash')
+    qa_prompt = _build_qa_prompt(data['document_text'], data['question'])
+    
+    try:
+        model_instance = get_gemini_model(selected_model_name)
+        response = model_instance.generate_content(qa_prompt)
+        return jsonify({"answer": response.text})
+    except ValueError as e:
+        print(f"Gemini API initialization error for /ask: {e}")
+        return jsonify({"error": f"AI model configuration error for chat: {e}"}), 500
+    except Exception as e:
+        print(f"An error occurred during /ask API call: {e}")
+        return jsonify({"error": "Failed to get a response for your question. Check server logs for details."}), 500
+
 @app.route('/documents', methods=['GET'])
 def get_documents():
-    # ... [function is unchanged]
+    with app.app_context(): # Ensure app context for db query
+        documents = Document.query.order_by(Document.upload_date.desc()).all()
+    return jsonify([doc.to_dict() for doc in documents])
+
 @app.route('/history', methods=['GET'])
 def get_history():
-    # ... [function is unchanged]
+    with app.app_context(): # Ensure app context for db query
+        events = HistoryEvent.query.order_by(HistoryEvent.timestamp.desc()).all()
+    return jsonify([event.to_dict() for event in events])
+
 @app.route('/document/<int:doc_id>', methods=['DELETE'])
 def delete_document(doc_id):
-    # ... [function is unchanged]
+    with app.app_context(): # Ensure app context for db operations
+        doc = Document.query.get_or_404(doc_id)
+        db.session.delete(doc)
+        db.session.commit()
+        log_event("DELETE_DOCUMENT", doc.filename)
+    return jsonify({"message": "Document deleted successfully."})
 
 # This is a root route to confirm the server is running.
 @app.route('/')
