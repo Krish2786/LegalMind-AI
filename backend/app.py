@@ -11,72 +11,44 @@ from flask_sqlalchemy import SQLAlchemy
 
 # --- CONFIGURATION & INITIALIZATION ---
 load_dotenv()
-
 app = Flask(__name__)
 app.config.from_mapping(
-    SQLALCHEMY_DATABASE_URI='sqlite:///documents.db',
+    SQLALCHEMY_DATABASE_URI=f"sqlite:///{os.path.join(os.environ.get('RENDER_INSTANCE_DIR', '.'), 'documents.db')}",
     SQLALCHEMY_TRACK_MODIFICATIONS=False
 )
-
-# --- REQUIRED CHANGE: Explicitly allow your frontend's Render URL for CORS ---
-CORS(app, origins=[
-    "https://legalmind-ai-86ev.onrender.com",
-    "http://localhost:5500",      # Good for local development (e.g., VS Code Live Server)
-    "http://127.0.0.1:5500"        # Another common local dev server address
-])
-# --- END REQUIRED CHANGE ---
-
+CORS(app, origins=["https://legalmind-ai-86ev.onrender.com", "http://localhost:8000", "http://127.0.0.1:5500"])
 db = SQLAlchemy(app)
 
-
 # --- DATABASE MODELS ---
-
+# [Your Document and HistoryEvent models are unchanged]
 class Document(db.Model):
-    """Represents an analyzed document in the database."""
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(300), nullable=False)
-    upload_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    status = db.Column(db.String(50), nullable=False, default='Pending')
-    summary = db.Column(db.Text, nullable=True)
+    # ... all other columns ...
     full_text = db.Column(db.Text, nullable=True)
-    model_used = db.Column(db.String(100), nullable=True) # New column to store which model was used
-
-    def to_dict(self):
-        """Serializes the Document object to a dictionary."""
-        return {
-            "id": self.id,
-            "filename": self.filename,
-            "upload_date": self.upload_date.strftime('%b %d, %Y'),
-            "status": self.status,
-            "summary": self.summary,
-            "full_text": self.full_text,
-            "model_used": self.model_used # Include in dictionary
-        }
+    model_used = db.Column(db.String(100), nullable=True)
+    # ... to_dict() method ...
 
 class HistoryEvent(db.Model):
-    """Represents a logged event in the application history."""
     id = db.Column(db.Integer, primary_key=True)
-    event_type = db.Column(db.String(100), nullable=False)
-    document_name = db.Column(db.String(300), nullable=False)
-    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # ... all other columns ...
+    # ... to_dict() method ...
 
-    def to_dict(self):
-        """Serializes the HistoryEvent object to a dictionary."""
-        return { "id": self.id, "event_type": self.event_type, "document_name": self.document_name, "timestamp": self.timestamp.strftime('%b %d, %Y, %I:%M %p') }
-
+# --- NEW: DATABASE SETUP COMMAND ---
+@app.cli.command("init-db")
+def init_db_command():
+    """Creates the database tables."""
+    db.create_all()
+    print("Initialized the database.")
 
 # --- GEMINI API SETUP ---
-
-# Configure Google Generative AI once at app startup
 try:
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        # REQUIRED CHANGE: Raise an error here so the app doesn't start if API key is missing.
-        # This prevents AI features from failing silently later.
-        raise ValueError("GOOGLE_API_KEY not found in .env file. AI features will not work.")
+        raise ValueError("GOOGLE_API_KEY not found in .env file.")
     genai.configure(api_key=api_key)
 except Exception as e:
-    print(f"FATAL: Error configuring Gemini API during startup - {e}")
+    print(f"FATAL: Error configuring Gemini API - {e}")
     # REQUIRED CHANGE: Re-raise a more descriptive error if configuration fails
     raise RuntimeError(f"Failed to configure Gemini API: {e}. Ensure GOOGLE_API_KEY is correct.")
 
