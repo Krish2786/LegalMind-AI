@@ -18,15 +18,13 @@ app.config.from_mapping(
     SQLALCHEMY_TRACK_MODIFICATIONS=False
 )
 
-# --- IMPORTANT CHANGE HERE ---
-# Explicitly allow your frontend's Render URL
-# If you ever host your frontend elsewhere, add its domain to this list.
+# --- REQUIRED CHANGE: Explicitly allow your frontend's Render URL for CORS ---
 CORS(app, origins=[
     "https://legalmind-ai-86ev.onrender.com",
     "http://localhost:5500",      # Good for local development (e.g., VS Code Live Server)
     "http://127.0.0.1:5500"       # Another common local dev server address
 ])
-# --- END IMPORTANT CHANGE ---
+# --- END REQUIRED CHANGE ---
 
 db = SQLAlchemy(app)
 
@@ -73,13 +71,14 @@ class HistoryEvent(db.Model):
 try:
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        print("Warning: GOOGLE_API_KEY not found in .env file. AI features may fail.")
-    else:
-        genai.configure(api_key=api_key)
+        # REQUIRED CHANGE: Raise an error here so the app doesn't start if API key is missing.
+        # This prevents AI features from failing silently later.
+        raise ValueError("GOOGLE_API_KEY not found in .env file. AI features will not work.")
+    genai.configure(api_key=api_key)
 except Exception as e:
     print(f"FATAL: Error configuring Gemini API during startup - {e}")
-    # In a production app, you might want to log this and raise a critical error
-    # but for development, we'll let individual API calls handle it.
+    # REQUIRED CHANGE: Re-raise a more descriptive error if configuration fails
+    raise RuntimeError(f"Failed to configure Gemini API: {e}. Ensure GOOGLE_API_KEY is correct.")
 
 
 # --- HELPER FUNCTIONS ---
@@ -88,9 +87,9 @@ def get_gemini_model(model_name: str):
     """Dynamically gets a GenerativeModel instance based on the provided name."""
     # Ensure API key is present before attempting to get a model
     # The genai.configure() call handles setting the default API key.
-    # If it failed or was skipped, subsequent model creations will raise errors.
-    # We can rely on that or explicitly check os.getenv("GOOGLE_API_KEY")
     if not os.getenv("GOOGLE_API_KEY"):
+        # This check is redundant if the above `genai.configure` block is correct,
+        # but good for safety if a call happens before configuration.
         raise ValueError("GOOGLE_API_KEY is not set. Cannot initialize Gemini model.")
 
     try:
@@ -117,9 +116,13 @@ def extract_text_from_pdf(file_stream: IO) -> str | None:
 
 def log_event(event_type: str, document_name: str):
     """Creates and saves a new history event to the database."""
+    # --- REQUIRED CHANGE: Removed 'with app.app_context()' ---
+    # This was causing issues because log_event is called within an active request context
+    # where app_context is already present. Adding it again causes a reentrant error or other conflicts.
     event = HistoryEvent(event_type=event_type, document_name=document_name)
     db.session.add(event)
     db.session.commit()
+    # --- END REQUIRED CHANGE ---
 
 def _build_analysis_prompt(document_text: str, user_prompt: str) -> str:
     """Builds the detailed analysis prompt for the Gemini API."""
@@ -192,14 +195,11 @@ def _build_qa_prompt(document_text: str, question: str) -> str:
 @app.route('/simplify', methods=['POST'])
 def simplify_document():
     """Analyzes a document, saves it with its full text, and logs events."""
-    # The get_gemini_model will handle checks for API key availability.
-    
     if 'pdfFile' not in request.files: return jsonify({"error": "No PDF file provided."}), 400
     
     pdf_file = request.files['pdfFile']
     if not pdf_file.filename: return jsonify({"error": "No selected file."}), 400
 
-    # Get selected model from the request, default to 'gemini-1.5-flash' if not provided
     selected_model_name = request.form.get('model', 'gemini-1.5-flash')
     
     log_event("UPLOAD_SUCCESS", pdf_file.filename)
@@ -221,7 +221,6 @@ def simplify_document():
     full_prompt = _build_analysis_prompt(document_text, prompt_from_user)
     
     try:
-        # Get the dynamically selected model
         model_instance = get_gemini_model(selected_model_name)
         response = model_instance.generate_content(full_prompt)
         new_doc.summary = response.text
@@ -247,21 +246,19 @@ def simplify_document():
 @app.route('/ask', methods=['POST'])
 def ask_question():
     """Answers a follow-up question based on provided document context."""
-    # The get_gemini_model will handle checks for API key availability.
     
     data = request.get_json()
     if not data or 'document_text' not in data or 'question' not in data:
         return jsonify({"error": "Missing document_text or question in request."}), 400
 
-    # Get selected model from the request JSON, default to 'gemini-1.5-flash'
     selected_model_name = data.get('model', 'gemini-1.5-flash')
 
     qa_prompt = _build_qa_prompt(data['document_text'], data['question'])
     
     try:
-        # Get the dynamically selected model for the chat
         model_instance = get_gemini_model(selected_model_name)
         
+        # The chat history setup is correct for follow-up questions
         chat = model_instance.start_chat(history=[
             {"role": "user", "parts": [f"Here is the legal document for context:\n\n{data['document_text']}"]},
             {"role": "model", "parts": ["Understood. I have the document context."]}
