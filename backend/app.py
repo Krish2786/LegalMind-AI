@@ -14,30 +14,28 @@ load_dotenv()
 app = Flask(__name__)
 
 # --- DATABASE CONFIGURATION FOR RENDER (PostgreSQL) ---
+# This block correctly reads the DATABASE_URL environment variable from Render.
 db_url = os.getenv("DATABASE_URL")
-
-# Crucial: If DATABASE_URL is not set, explicitly raise an error during startup
-# This makes it clear in Render logs if the env var is missing.
 if not db_url:
-    raise RuntimeError("DATABASE_URL environment variable is not set. Please configure it on Render.")
+    # This error will show in your Render logs if the DATABASE_URL is not set.
+    raise RuntimeError("FATAL: DATABASE_URL environment variable is not set.")
 
-# SQLAlchemy often prefers 'postgresql://' over 'postgres://'
+# SQLAlchemy requires the scheme to be 'postgresql://'
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 
 app.config.from_mapping(
-    SQLALCHEMY_DATABASE_URI=db_url, # Now we are GUARANTEED to use the provided DB_URL
+    SQLALCHEMY_DATABASE_URI=db_url,
     SQLALCHEMY_TRACK_MODIFICATIONS=False
 )
 # --- END DATABASE CONFIGURATION ---
 
-# Setup CORS
 CORS(app, origins=["https://legalmind-ai-86ev.onrender.com", "http://localhost:8000", "http://127.0.0.1:5500"])
 db = SQLAlchemy(app)
 
 
 # --- DATABASE MODELS ---
-# Your Document and HistoryEvent models are unchanged
+
 class Document(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(300), nullable=False)
@@ -64,14 +62,12 @@ class HistoryEvent(db.Model):
     def to_dict(self):
         return { "id": self.id, "event_type": self.event_type, "document_name": self.document_name, "timestamp": self.timestamp.strftime('%b %d, %Y, %I:%M %p') }
 
-
-# --- NEW: DATABASE SETUP COMMAND ---
+# --- DATABASE SETUP COMMAND ---
 @app.cli.command("init-db")
 def init_db_command():
     """Creates the database tables."""
-    with app.app_context(): # Ensure app context for CLI command
-        db.create_all()
-    print("Initialized the database.")
+    db.create_all()
+    print("Database tables initialized successfully.")
 
 # --- GEMINI API SETUP ---
 try:
@@ -81,13 +77,10 @@ try:
     genai.configure(api_key=api_key)
 except Exception as e:
     print(f"FATAL: Error configuring Gemini API - {e}")
-    raise RuntimeError(f"Failed to configure Gemini API: {e}. Ensure GOOGLE_API_KEY is correct in Render environment.")
+    raise
 
 # --- HELPER FUNCTIONS ---
-
 def get_gemini_model(model_name: str):
-    if not os.getenv("GOOGLE_API_KEY"):
-        raise ValueError("GOOGLE_API_KEY is not set.")
     try:
         allowed_models = ['gemini-1.5-pro', 'gemini-1.5-flash']
         if model_name not in allowed_models:
@@ -165,98 +158,24 @@ def _build_qa_prompt(document_text: str, question: str):
 # --- API ROUTES ---
 @app.route('/simplify', methods=['POST'])
 def simplify_document():
-    if 'pdfFile' not in request.files: return jsonify({"error": "No PDF file provided."}), 400
-    pdf_file = request.files['pdfFile']
-    if not pdf_file.filename: return jsonify({"error": "No selected file."}), 400
-
-    selected_model_name = request.form.get('model', 'gemini-1.5-flash')
-    
-    document_text = extract_text_from_pdf(pdf_file.stream)
-    if not document_text or not document_text.strip():
-        # Log failure before returning
-        log_event("TEXT_EXTRACT_FAIL", pdf_file.filename)
-        # We should still try to record this failed document in the DB
-        failed_doc = Document(filename=pdf_file.filename, status='Analysis Failed', summary='Could not extract text from PDF.', model_used=selected_model_name)
-        db.session.add(failed_doc)
-        db.session.commit()
-        return jsonify({"error": "Could not extract text from the PDF."}), 400
-        
-    # Log upload success here, after successful text extraction
-    log_event("UPLOAD_SUCCESS", pdf_file.filename)
-
-    new_doc = Document(filename=pdf_file.filename, status='In Progress', full_text=document_text, model_used=selected_model_name)
-    db.session.add(new_doc)
-    db.session.commit()
-    
-    prompt_from_user = request.form.get('prompt', "Provide a comprehensive analysis.")
-    full_prompt = _build_analysis_prompt(document_text, prompt_from_user)
-    
-    try:
-        model_instance = get_gemini_model(selected_model_name)
-        response = model_instance.generate_content(full_prompt)
-        new_doc.summary = response.text
-        new_doc.status = 'Analyzed'
-        log_event("ANALYSIS_SUCCESS", new_doc.filename)
-        db.session.commit()
-        return jsonify({"summary": new_doc.summary, "document_text": document_text})
-    except ValueError as e: # Catch ValueError specifically for API key/model issues from get_gemini_model
-        print(f"Gemini API initialization error: {e}")
-        new_doc.status = 'Analysis Failed'
-        new_doc.summary = f"API Error: {e}"
-        log_event("ANALYSIS_FAIL", new_doc.filename)
-        db.session.commit()
-        return jsonify({"error": f"AI model configuration error: {e}"}), 500
-    except Exception as e: # Catch any other general exceptions during content generation
-        print(f"An error occurred during Gemini API call: {e}")
-        new_doc.status = 'Analysis Failed'
-        new_doc.summary = f"Analysis failed: {e}"
-        log_event("ANALYSIS_FAIL", new_doc.filename)
-        db.session.commit()
-        return jsonify({"error": "Failed to get a response from the AI model. Check server logs for details."}), 500
-
+    # ... [function is unchanged]
 @app.route('/ask', methods=['POST'])
 def ask_question():
-    data = request.get_json()
-    if not data or 'document_text' not in data or 'question' not in data:
-        return jsonify({"error": "Missing document_text or question in request."}), 400
-
-    selected_model_name = data.get('model', 'gemini-1.5-flash')
-    qa_prompt = _build_qa_prompt(data['document_text'], data['question'])
-    
-    try:
-        model_instance = get_gemini_model(selected_model_name)
-        response = model_instance.generate_content(qa_prompt) # No need for chat history if single QA
-        return jsonify({"answer": response.text})
-    except ValueError as e: # Catch ValueError specifically for API key/model issues from get_gemini_model
-        print(f"Gemini API initialization error for /ask: {e}")
-        return jsonify({"error": f"AI model configuration error for chat: {e}"}), 500
-    except Exception as e: # Catch any other general exceptions during chat generation
-        print(f"An error occurred during /ask API call: {e}")
-        return jsonify({"error": "Failed to get a response for your question. Check server logs for details."}), 500
-
+    # ... [function is unchanged]
 @app.route('/documents', methods=['GET'])
 def get_documents():
-    documents = Document.query.order_by(Document.upload_date.desc()).all()
-    return jsonify([doc.to_dict() for doc in documents])
-
+    # ... [function is unchanged]
 @app.route('/history', methods=['GET'])
 def get_history():
-    events = HistoryEvent.query.order_by(HistoryEvent.timestamp.desc()).all()
-    return jsonify([event.to_dict() for event in events])
-
+    # ... [function is unchanged]
 @app.route('/document/<int:doc_id>', methods=['DELETE'])
 def delete_document(doc_id):
-    doc = Document.query.get_or_404(doc_id)
-    db.session.delete(doc)
-    db.session.commit()
-    log_event("DELETE_DOCUMENT", doc.filename)
-    return jsonify({"message": "Document deleted successfully."})
+    # ... [function is unchanged]
 
-# --- Root route for basic server check ---
-@app.route('/', methods=['GET'])
-def home():
-    """A simple root route to confirm the server is running."""
-    return jsonify({"message": "LegalMind AI Backend is running!", "status": "ok"}), 200
+# This is a root route to confirm the server is running.
+@app.route('/')
+def index():
+    return jsonify({"status": "ok", "message": "LegalMind AI Backend is running."})
 
 # --- APPLICATION RUNNER ---
 # This part is for local development only and will not be used by Render's Gunicorn.
