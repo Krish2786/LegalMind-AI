@@ -3,348 +3,290 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LegalMind AI | Document Analysis</title>
+    <title>LegalMind AI Simplified Frontend</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        :root {
-            --primary: #1a3d7c;
-            --primary-light: #2c5ba3;
-            --secondary: #f8f9fa;
-            --accent: #ff6b6b;
-            --text: #333;
-            --text-light: #6c757d;
-            --border: #dee2e6;
-            --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-            --radius: 8px;
-            --sidebar-width: 280px;
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); }
+        h1, h2 { color: #1a3d7c; text-align: center; margin-bottom: 25px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 8px; color: #1a3d7c; }
+        input[type="file"], input[type="text"], select, button {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+            font-size: 16px;
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: #f5f7fa; color: var(--text); line-height: 1.6; display: flex; min-height: 100vh; }
-        /* Fixed Sidebar Styles */
-        .sidebar {
-            width: var(--sidebar-width);
-            background: white;
-            box-shadow: var(--shadow);
+        input[type="file"] { border: none; padding: 0; }
+        button {
+            background-color: #1a3d7c;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        button:hover { background-color: #2c5ba3; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        .result-box, .chat-box {
+            background-color: #eef3f6;
             padding: 20px;
-            display: flex;
-            flex-direction: column;
-            position: fixed; /* Make the sidebar fixed */
-            top: 0;
-            left: 0;
-            height: 100vh; /* Make it take full viewport height */
-            z-index: 20; /* Ensure it stays on top */
+            border-radius: 8px;
+            min-height: 100px;
+            margin-top: 25px;
+            border: 1px solid #dcdcdc;
+            overflow-y: auto;
+            max-height: 400px;
         }
-        .logo { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 600; color: var(--primary); margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
-        .logo i { font-size: 28px; }
-        .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 15px; border-radius: var(--radius); color: var(--text); text-decoration: none; margin-bottom: 5px; transition: all 0.3s; }
-        .nav-item:hover, .nav-item.active { background: var(--primary); color: white; }
-
-        /* Main Content Adjustments for Fixed Sidebar */
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto; /* Allow scrolling only for main content */
-            margin-left: var(--sidebar-width); /* Push content over by sidebar width */
-            min-height: 100vh; /* Ensure it takes full height */
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
         }
-        .top-bar { background: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow); z-index: 10; }
-        .content { padding: 30px; flex: 1; /* overflow: auto; REMOVED, controlled by main-content */ }
-        .section-title { font-size: 1.8rem; color: var(--primary); margin-bottom: 20px; }
-        .upload-card { background: white; border-radius: var(--radius); padding: 25px; box-shadow: var(--shadow); margin-bottom: 30px; }
-        .form-group { margin-bottom: 20px; text-align: left; }
-        .form-group label { display: block; font-weight: 600; margin-bottom: 8px; color: var(--primary); }
-        .form-group input[type="text"], .form-group select { width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 1em; }
-        .upload-area { border: 2px dashed var(--border); padding: 30px; border-radius: var(--radius); text-align: center; cursor: pointer; transition: background-color 0.3s; }
-        .upload-area:hover { background-color: var(--secondary); }
-        .upload-icon { font-size: 48px; color: var(--primary-light); margin-bottom: 16px; }
-        .btn { background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: var(--radius); font-size: 16px; font-weight: 500; cursor: pointer; transition: background 0.3s; display: inline-block; }
-        .btn:hover { background: var(--primary-light); }
-        .btn:disabled { background: var(--text-light); cursor: not-allowed; }
-        .file-input { display: none; }
-        .analysis-container { margin-bottom: 30px;}
-        .analysis-results { background: white; border-radius: var(--radius); padding: 25px; box-shadow: var(--shadow); min-height: 300px; overflow: auto; }
-        .analysis-results h3 { color: var(--primary); margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
-        #results-content h3 { font-size: 1.2rem; color: var(--primary); margin-top: 20px; margin-bottom: 10px; }
-        #results-content ul { padding-left: 20px; margin-bottom: 15px; }
-        #results-content li { margin-bottom: 8px; }
-        #results-content p { margin-bottom: 10px; }
-        #results-content table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-        #results-content th, #results-content td { border: 1px solid var(--border); padding: 8px; text-align: left; }
-        #results-content th { background-color: var(--secondary); }
-        .loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.9); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; }
-        .spinner { width: 60px; height: 60px; border: 5px solid rgba(26, 61, 124, 0.2); border-radius: 50%; border-top-color: var(--primary); animation: spin 1s linear infinite; margin-bottom: 20px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .highlight-critical { color: #c0392b; border-bottom: 3px solid rgba(192, 57, 43, 0.3); font-weight: 600; padding-bottom: 1px; }
-        .highlight-moderate { color: #d35400; border-bottom: 3px solid rgba(211, 84, 0, 0.3); font-weight: 600; padding-bottom: 1px; }
-        .chat-box { background: white; border-radius: var(--radius); padding: 25px; box-shadow: var(--shadow); }
-        .chat-box h3 { color: var(--primary); margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
-        .chat-messages { min-height: 100px; max-height: 300px; overflow-y: auto; margin-bottom: 20px; padding: 15px; background: var(--secondary); border-radius: var(--radius); }
-        .message { margin-bottom: 15px; padding: 12px; border-radius: var(--radius); max-width: 80%; line-height: 1.4; word-wrap: break-word; }
-        .message.user { background: var(--primary); color: white; margin-left: auto; }
-        .message.ai { background: #e9ecef; color: var(--text); }
-        .chat-input { display: flex; gap: 10px; }
-        .chat-input input { flex: 1; padding: 12px 15px; border: 1px solid var(--border); border-radius: var(--radius); outline: none; }
-        .chat-input input:disabled { background: #f1f1f1; cursor: not-allowed; }
-        .chat-input button { background: var(--primary); color: white; border: none; border-radius: var(--radius); width: 50px; cursor: pointer; }
-        .chat-input button:disabled { background: var(--text-light); cursor: not-allowed; }
-        .spinner-dots { display: flex; align-items: center; gap: 5px; }
-        .spinner-dots .dot { width: 8px; height: 8px; background-color: #888; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out both; }
+        .spinner {
+            border: 4px solid rgba(0,0,0,.1);
+            border-left-color: #1a3d7c;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .error-message { color: #ff6b6b; font-weight: bold; margin-top: 10px; }
+        .chat-messages {
+            background-color: #fff;
+            border: 1px solid #eee;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 250px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+        }
+        .message {
+            padding: 10px 15px;
+            border-radius: 15px;
+            margin-bottom: 10px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .message.user {
+            background-color: #1a3d7c;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+        .message.ai {
+            background-color: #e0e0e0;
+            color: #333;
+            margin-right: auto;
+            text-align: left;
+        }
+        .chat-input-area { display: flex; gap: 10px; }
+        .chat-input-area input { flex-grow: 1; }
+        .spinner-dots {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+        }
+        .spinner-dots .dot {
+            width: 8px;
+            height: 8px;
+            background-color: #888;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
         .spinner-dots .dot:nth-child(1) { animation-delay: -0.32s; }
         .spinner-dots .dot:nth-child(2) { animation-delay: -0.16s; }
-        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
     </style>
 </head>
 <body>
-    <aside class="sidebar">
-        <div class="logo"><i class="fas fa-scale-balanced"></i><span>LegalMind AI</span></div>
-        <a href="#" class="nav-item active"><i class="fas fa-home"></i><span>Dashboard</span></a>
-        <a href="documents.html" class="nav-item"><i class="fas fa-file-contract"></i><span>Documents</span></a>
-        <a href="history.html" class="nav-item"><i class="fas fa-history"></i><span>History</span></a>
-    </aside>
+    <div class="container">
+        <h1>LegalMind AI Document Analysis</h1>
 
-    <main class="main-content">
-        <div class="top-bar"></div>
-        <div class="content">
-            <h1 class="section-title">Document Analysis</h1>
-            
-            <form id="analysis-form">
-                <div class="upload-card">
-                    <div class="form-group">
-                        <label for="fileInput">1. Upload Legal Document (.pdf)</label>
-                        <div class="upload-area" id="uploadArea">
-                            <div class="upload-icon"><i class="fas fa-file-upload"></i></div>
-                            <p><b>Drag & drop your file here</b> or click to browse</p>
-                            <p id="fileName" style="color: var(--primary); font-weight: 500;"></p>
-                        </div>
-                        <input type="file" id="fileInput" class="file-input" accept=".pdf" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="modelSelect">2. Choose Gemini Model</label>
-                        <select id="modelSelect">
-                            <option value="gemini-1.5-pro">Gemini 1.5 Pro (Complex Reasoning & Analysis)</option>
-                            <option value="gemini-1.5-flash" selected>Gemini 1.5 Flash (Fast All-around Help)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="promptInput">3. Enter Your Request (Optional)</label>
-                        <input type="text" id="promptInput" placeholder="e.g., Explain the termination clause to me.">
-                    </div>
-                    <button type="submit" class="btn" id="submitBtn">
-                        <i class="fas fa-cogs"></i> Analyze Document
-                    </button>
-                </div>
-            </form>
-            
-            <div class="analysis-container">
-                <div class="analysis-results">
-                    <h3>Analysis Results</h3>
-                    <div id="results-content">
-                           <p style="color: var(--text-light);">Your analysis will appear here.</p>
-                    </div>
-                </div>
+        <form id="analysis-form">
+            <div class="form-group">
+                <label for="pdfFile">Upload PDF Document:</label>
+                <input type="file" id="pdfFile" accept=".pdf" required>
             </div>
+            <div class="form-group">
+                <label for="modelSelect">Choose Gemini Model:</label>
+                <select id="modelSelect">
+                    <option value="gemini-1.5-flash" selected>Gemini 1.5 Flash (Fast & Cost-Effective)</option>
+                    <option value="gemini-1.5-pro">Gemini 1.5 Pro (Advanced Reasoning)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="promptInput">Your Analysis Request (Optional):</label>
+                <input type="text" id="promptInput" placeholder="e.g., Summarize key risks or explain clause 5.">
+            </div>
+            <button type="submit" id="submitBtn"><i class="fas fa-magic"></i> Analyze Document</button>
+        </form>
 
-            <div class="chat-box">
-                <h3>Ask a Follow-up Question</h3>
-                <div class="chat-messages" id="chatMessages">
-                    <div class="message ai">Please analyze a document or load one from your history to begin the chat.</div>
-                </div>
-                <div class="chat-input">
-                    <input type="text" id="chatInput" placeholder="Ask anything about this document..." disabled>
-                    <button id="chatSendBtn" disabled><i class="fas fa-paper-plane"></i></button>
-                </div>
+        <div class="loading-spinner" id="loadingSpinner">
+            <div class="spinner"></div>
+            <p>Analyzing document, please wait...</p>
+        </div>
+
+        <div class="result-box" id="analysisResult">
+            <h2>Analysis Results</h2>
+            <p>Upload a document to see the analysis here.</p>
+        </div>
+
+        <div class="chat-box" style="margin-top: 30px;">
+            <h2>Ask Follow-up Questions</h2>
+            <div class="chat-messages" id="chatMessages">
+                <div class="message ai">Upload and analyze a document to start chatting.</div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chatInput" placeholder="Ask anything about the document..." disabled>
+                <button id="chatSendBtn" disabled><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>
-    </main>
-
-    <div class="loading-overlay" id="loadingOverlay">
-        <div class="spinner"></div>
-        <h3>Analyzing your document...</h3>
-        <p>This may take a few moments.</p>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // --- ELEMENT REFERENCES ---
-            const analysisForm = document.getElementById('analysis-form');
-            const fileInput = document.getElementById('fileInput');
-            const promptInput = document.getElementById('promptInput');
-            const modelSelect = document.getElementById('modelSelect'); // New: Model selection
-            const submitBtn = document.getElementById('submitBtn');
-            const loadingOverlay = document.getElementById('loadingOverlay');
-            const uploadArea = document.getElementById('uploadArea');
-            const fileNameDisplay = document.getElementById('fileName');
-            const resultsContent = document.getElementById('results-content');
-            const chatMessages = document.getElementById('chatMessages');
-            const chatInput = document.getElementById('chatInput');
-            const chatSendBtn = document.getElementById('chatSendBtn');
-            
-            let documentContext = "";
-            let currentModel = modelSelect.value; // Initialize with default selected model
+        const BACKEND_URL = "https://legalmind-ai-86ev.onrender.com"; // YOUR RENDER BACKEND URL
 
-            // Listen for changes in the model selection
-            modelSelect.addEventListener('change', () => {
-                currentModel = modelSelect.value;
-            });
-            
-            // --- KEYWORD LISTS & HIGHLIGHTING FUNCTION ---
-            const criticalWords = ['terminate', 'termination', 'indemnify', 'indemnification', 'liability', 'breach', 'default', 'waive', 'arbitration', 'litigation', 'damages', 'unfavorable', 'without cause'];
-            const moderateWords = ['insurance', 'confidentiality', 'notice period', 'payment terms', 'obligations', 'jurisdiction', 'governing law', 'assignment', 'exhibits'];
+        const analysisForm = document.getElementById('analysis-form');
+        const pdfFileInput = document.getElementById('pdfFile');
+        const modelSelect = document.getElementById('modelSelect');
+        const promptInput = document.getElementById('promptInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const analysisResult = document.getElementById('analysisResult');
+        const chatMessages = document.getElementById('chatMessages');
+        const chatInput = document.getElementById('chatInput');
+        const chatSendBtn = document.getElementById('chatSendBtn');
 
-            function highlightKeywords(htmlContent) {
-                let highlightedContent = htmlContent;
-                criticalWords.forEach(word => {
-                    const regex = new RegExp(`\\b(${word})\\b`, 'gi');
-                    highlightedContent = highlightedContent.replace(regex, `<span class="highlight-critical">$1</span>`);
-                });
-                moderateWords.forEach(word => {
-                    const regex = new RegExp(`\\b(${word})\\b`, 'gi');
-                    highlightedContent = highlightedContent.replace(regex, `<span class="highlight-moderate">$1</span>`);
-                });
-                return highlightedContent;
+        let currentDocumentText = ''; // Stores the full text for follow-up questions
+
+        // Function to add a message to the chat box
+        function addChatMessage(text, sender, isLoading = false) {
+            const messageEl = document.createElement('div');
+            messageEl.classList.add('message', sender);
+            if (isLoading) {
+                messageEl.innerHTML = '<div class="spinner-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>';
+            } else {
+                messageEl.innerHTML = marked.parse(text); // Use marked to render markdown
             }
-            
-            // --- FUNCTION TO LOAD ANALYSIS FROM "VIEW" CLICK ---
-            function loadAnalysisFromStorage() {
-                const storedDoc = localStorage.getItem('viewAnalysis');
-                if (storedDoc) {
-                    const doc = JSON.parse(storedDoc);
-                    
-                    fileNameDisplay.textContent = `Viewing analysis for: ${doc.filename}`;
-                    
-                    const rawHtml = marked.parse(doc.summary);
-                    const highlightedHtml = highlightKeywords(rawHtml);
-                    resultsContent.innerHTML = highlightedHtml;
+            chatMessages.appendChild(messageEl);
+            chatMessages.scrollTop = chatMessages.scrollHeight; // Auto-scroll to latest message
+            return messageEl; // Return element to update later (e.g., remove spinner)
+        }
 
-                    if (doc.full_text) {
-                        documentContext = doc.full_text;
-                        enableChat();
-                    } else {
-                        addMessage("Summary loaded, but Q&A is unavailable as its full text was not saved.", 'ai');
-                    }
-                    
-                    localStorage.removeItem('viewAnalysis');
-                }
+        analysisForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const pdfFile = pdfFileInput.files[0];
+            const prompt = promptInput.value;
+            const model = modelSelect.value;
+
+            if (!pdfFile) {
+                alert('Please upload a PDF file.');
+                return;
             }
-            
-            // --- FILE UPLOAD UI HANDLING ---
-            uploadArea.addEventListener('click', () => fileInput.click());
-            fileInput.addEventListener('change', () => {
-                if (fileInput.files.length > 0) {
-                    fileNameDisplay.textContent = `Selected file: ${fileInput.files[0].name}`;
+
+            loadingSpinner.style.display = 'block';
+            submitBtn.disabled = true;
+            analysisResult.innerHTML = '<p>Analyzing document, please wait...</p>';
+            chatInput.disabled = true;
+            chatSendBtn.disabled = true;
+            chatMessages.innerHTML = ''; // Clear previous chat history
+
+            const formData = new FormData();
+            formData.append('pdfFile', pdfFile);
+            formData.append('prompt', prompt);
+            formData.append('model', model);
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/simplify`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to analyze document.');
                 }
-            });
-            
-            // --- MAIN FORM SUBMISSION HANDLING ---
-            analysisForm.addEventListener('submit', async (event) => {
-                event.preventDefault();
-                const file = fileInput.files[0];
-                const prompt = promptInput.value;
-                const selectedModel = modelSelect.value; // Get selected model here
-                
-                if (!file) {
-                    alert('Please select a PDF file to analyze.');
-                    return;
-                }
 
-                loadingOverlay.style.display = 'flex';
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '<i class="fas fa-cogs fa-spin"></i> Analyzing...';
-                resultsContent.innerHTML = ''; 
+                currentDocumentText = data.document_text; // Save document text for chat
+                analysisResult.innerHTML = marked.parse(data.summary); // Render markdown summary
 
-                const formData = new FormData();
-                formData.append('pdfFile', file);
-                formData.append('prompt', prompt);
-                formData.append('model', selectedModel); // Add selected model to formData
-
-                try {
-                    const response = await fetch('https://legalmind-ai-onrender.com/simplify', { // UPDATED HERE
-                        method: 'POST',
-                        body: formData,
-                    });
-                    const data = await response.json();
-                    if (!response.ok) throw new Error(data.error || 'An unknown error occurred.');
-                    
-                    documentContext = data.document_text;
-                    
-                    const rawHtml = marked.parse(data.summary);
-                    const highlightedHtml = highlightKeywords(rawHtml);
-                    resultsContent.innerHTML = highlightedHtml;
-
-                    enableChat();
-                } catch (error) {
-                    console.error('Error:', error);
-                    resultsContent.innerHTML = `<p style="color: var(--accent);"><b>Error:</b> ${error.message}</p>`;
-                } finally {
-                    loadingOverlay.style.display = 'none';
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="fas fa-cogs"></i> Analyze Document';
-                }
-            });
-
-            // --- CHAT FUNCTIONALITY ---
-            function enableChat() {
+                // Enable chat and add initial message
                 chatInput.disabled = false;
                 chatSendBtn.disabled = false;
-                chatMessages.innerHTML = '';
-                addMessage("I've loaded the document. Ask me anything about it.", 'ai');
+                addChatMessage("I've analyzed the document. Ask me anything about it!", 'ai');
+
+            } catch (error) {
+                console.error('Error:', error);
+                analysisResult.innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+                addChatMessage(`Error starting chat: ${error.message}`, 'ai');
+            } finally {
+                loadingSpinner.style.display = 'none';
+                submitBtn.disabled = false;
             }
-
-            function addMessage(text, sender, isLoading = false) {
-                const messageEl = document.createElement('div');
-                messageEl.classList.add('message', sender);
-                if (isLoading) {
-                    messageEl.innerHTML = '<div class="spinner-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>';
-                } else {
-                    messageEl.textContent = text;
-                }
-                chatMessages.appendChild(messageEl);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-                return messageEl;
-            }
-
-            async function handleSendMessage() {
-                const question = chatInput.value.trim();
-                if (!question || !documentContext) return;
-
-                addMessage(question, 'user');
-                chatInput.value = '';
-                const thinkingMessage = addMessage('', 'ai', true);
-
-                try {
-                    const response = await fetch('https://legalmind-ai-onrender.com/ask', { // UPDATED HERE
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            document_text: documentContext,
-                            question: question,
-                            model: currentModel // Pass the current model selection to the chat API
-                        })
-                    });
-                    const data = await response.json();
-                    if (!response.ok) throw new Error(data.error);
-                    
-                    thinkingMessage.classList.remove('loading');
-                    thinkingMessage.textContent = data.answer;
-
-                } catch (error) {
-                    thinkingMessage.textContent = `Error: ${error.message}`;
-                    console.error("Chat error:", error);
-                }
-            }
-
-            chatSendBtn.addEventListener('click', handleSendMessage);
-            chatInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    handleSendMessage();
-                }
-            });
-
-            // --- RUN ON PAGE LOAD ---
-            loadAnalysisFromStorage();
         });
+
+        // Chat functionality
+        chatSendBtn.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        async function sendMessage() {
+            const question = chatInput.value.trim();
+            if (!question || !currentDocumentText) return;
+
+            addChatMessage(question, 'user');
+            chatInput.value = '';
+            const loadingMessage = addChatMessage('', 'ai', true); // Add loading spinner
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/ask`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        document_text: currentDocumentText,
+                        question: question,
+                        model: modelSelect.value, // Use the currently selected model for chat
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to get a response from AI.');
+                }
+
+                loadingMessage.remove(); // Remove spinner
+                addChatMessage(data.answer, 'ai'); // Add AI's answer
+
+            } catch (error) {
+                console.error('Chat error:', error);
+                loadingMessage.remove(); // Remove spinner
+                addChatMessage(`<p class="error-message">Chat Error: ${error.message}</p>`, 'ai');
+            }
+        }
     </script>
 </body>
 </html>
