@@ -1,1 +1,1 @@
-AIzaSyDdzne6ZgiVoq--FGL5n6Tqf6G81LZJnk8
+Place your API key for using it as environment variable
