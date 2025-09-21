@@ -18,7 +18,16 @@ app.config.from_mapping(
     SQLALCHEMY_TRACK_MODIFICATIONS=False
 )
 
-CORS(app)
+# --- IMPORTANT CHANGE HERE ---
+# Explicitly allow your frontend's Render URL
+# If you ever host your frontend elsewhere, add its domain to this list.
+CORS(app, origins=[
+    "https://legalmind-ai-86ev.onrender.com",
+    "http://localhost:5500",      # Good for local development (e.g., VS Code Live Server)
+    "http://127.0.0.1:5500"       # Another common local dev server address
+])
+# --- END IMPORTANT CHANGE ---
+
 db = SQLAlchemy(app)
 
 
