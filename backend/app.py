@@ -22,7 +22,7 @@ app.config.from_mapping(
 CORS(app, origins=[
     "https://legalmind-ai-86ev.onrender.com",
     "http://localhost:5500",      # Good for local development (e.g., VS Code Live Server)
-    "http://127.0.0.1:5500"       # Another common local dev server address
+    "http://127.0.0.1:5500"        # Another common local dev server address
 ])
 # --- END REQUIRED CHANGE ---
 
@@ -195,24 +195,34 @@ def _build_qa_prompt(document_text: str, question: str) -> str:
 @app.route('/simplify', methods=['POST'])
 def simplify_document():
     """Analyzes a document, saves it with its full text, and logs events."""
-    if 'pdfFile' not in request.files: return jsonify({"error": "No PDF file provided."}), 400
+    if 'pdfFile' not in request.files:
+        return jsonify({"error": "No PDF file provided."}), 400
     
     pdf_file = request.files['pdfFile']
-    if not pdf_file.filename: return jsonify({"error": "No selected file."}), 400
+    if not pdf_file.filename:
+        return jsonify({"error": "No selected file."}), 400
 
     selected_model_name = request.form.get('model', 'gemini-1.5-flash')
     
-    log_event("UPLOAD_SUCCESS", pdf_file.filename)
-    
+    # It's better to log the event after the document has been successfully processed
+    # or at least when we are sure about its filename.
+    # log_event("UPLOAD_SUCCESS", pdf_file.filename) # Removed from here
+
     document_text = extract_text_from_pdf(pdf_file.stream)
     
     if not document_text or not document_text.strip():
+        # Log failure before returning
+        log_event("TEXT_EXTRACT_FAIL", pdf_file.filename)
+        # We should still try to record this failed document in the DB
+        # This part was already there, just ensuring the return is consistent.
         failed_doc = Document(filename=pdf_file.filename, status='Analysis Failed', summary='Could not extract text from PDF.', model_used=selected_model_name)
         db.session.add(failed_doc)
         db.session.commit()
-        log_event("TEXT_EXTRACT_FAIL", pdf_file.filename)
         return jsonify({"error": "Could not extract text from the PDF."}), 400
         
+    # Log upload success here, after successful text extraction
+    log_event("UPLOAD_SUCCESS", pdf_file.filename)
+
     new_doc = Document(filename=pdf_file.filename, status='In Progress', full_text=document_text, model_used=selected_model_name)
     db.session.add(new_doc)
     db.session.commit()
@@ -300,4 +310,6 @@ def delete_document(doc_id):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+    # It's often helpful to keep debug=True for local development,
+    # but ensure it's False in production.
     app.run(debug=True, port=5000, threaded=False)
